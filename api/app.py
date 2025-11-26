@@ -1,0 +1,586 @@
+from flask import Flask, jsonify, request
+import fastf1
+import pandas as pd
+import threading
+import time
+import requests
+import json
+import tempfile
+import os
+import importlib
+import sqlite3
+from datetime import datetime
+
+app = Flask(__name__)
+
+whisper = importlib.import_module('whisper')
+whisper_model = whisper.load_model("medium")
+
+DB_PATH = 'f1_data.db'
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS sessions (
+        sessionKey INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionID TEXT UNIQUE NOT NULL,
+        year INTEGER,
+        gp TEXT,
+        session_type TEXT,
+        date TEXT,
+        circuit_name TEXT,
+        location TEXT,
+        number_of_laps INTEGER,
+        event_name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS drivers (
+        driverKey INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionKey INTEGER,
+        driver_code TEXT,
+        driver_name TEXT,
+        FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS laps (
+        lapKey INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionKey INTEGER,
+        driver TEXT,
+        driver_code TEXT,
+        lap_number INTEGER,
+        lap_time REAL,
+        sector1_time REAL,
+        sector2_time REAL,
+        sector3_time REAL,
+        is_personal_best BOOLEAN,
+        FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS telemetry (
+        telemetryKey INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionKey INTEGER,
+        driver_code TEXT,
+        lap_number INTEGER,
+        session_time_ms REAL,
+        x REAL,
+        y REAL,
+        gear INTEGER,
+        distance REAL,
+        speed INTEGER,
+        throttle REAL,
+        brake REAL,
+        rpm INTEGER,
+        drs INTEGER,
+        compound TEXT,
+        FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS pit_stops (
+        pitKey INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionKey INTEGER,
+        driver TEXT,
+        lap_number INTEGER,
+        pit_in_time REAL,
+        pit_out_time REAL,
+        duration REAL,
+        FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS messages (
+        messageKey INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionKey INTEGER,
+        time REAL,
+        category TEXT,
+        message TEXT,
+        status TEXT,
+        flag TEXT,
+        scope TEXT,
+        sector TEXT,
+        racing_number TEXT,
+        lap INTEGER,
+        FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS weather (
+        weatherKey INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionKey INTEGER,
+        time REAL,
+        rainfall REAL,
+        FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
+    )''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS radios (
+        radioKey INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionKey INTEGER,
+        timestamp TEXT,
+        utc TEXT,
+        racing_number TEXT,
+        audio_url TEXT,
+        transcript TEXT,
+        FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
+    )''')
+    
+    conn.commit()
+    conn.close()
+
+def get_session_id(year, gp, session_type):
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    date_str = session.date.strftime('%d-%m-%Y')
+    gp_upper = gp.upper()
+    session_type_upper = session_type.upper()
+    return f"{date_str}-{gp_upper}-{session_type_upper}"
+
+def get_or_create_session_key(year, gp, session_type):
+    session_id = get_session_id(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('SELECT sessionKey FROM sessions WHERE sessionID = ?', (session_id,))
+    result = c.fetchone()
+    
+    if result:
+        conn.close()
+        return result[0], session_id, False
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    
+    session_info = session.session_info
+    c.execute('''INSERT INTO sessions 
+                 (sessionID, year, gp, session_type, date, circuit_name, location, number_of_laps, event_name)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+              (session_id, year, gp, session_type, str(session.date),
+               session_info['Meeting']['Circuit']['ShortName'],
+               session_info['Meeting']['Country']['Name'],
+               session.total_laps,
+               session_info['Meeting']['EventName']))
+    
+    conn.commit()
+    session_key = c.lastrowid
+    conn.close()
+    
+    return session_key, session_id, True
+
+def timedelta_to_seconds(td):
+    if pd.isna(td):
+        return None
+    return td.total_seconds()
+
+def get_session_path(year, gp, session_type):
+    session = fastf1.get_session(year, gp, session_type)
+    session_date = session.date.strftime('%Y-%m-%d')
+    session_year = session.date.strftime('%Y')
+    event_name = session.event['EventName'].replace(' ', '_')
+    session_name = session.name.replace(' ', '_')
+    path = f"{session_year}/{session_date}_{event_name}/{session_date}_{session_name}/"
+    return path
+
+def parse_jsonstream(content):
+    lines = content.strip().split('\n')
+    messages = []
+    
+    for line in lines:
+        if not line.strip():
+            continue
+        parts = line.split('{', 1)
+        if len(parts) < 2:
+            continue
+        timestamp = parts[0].strip()
+        json_data = '{' + parts[1]
+        
+        try:
+            data = json.loads(json_data)
+            captures = data.get('Captures', {})
+            
+            if isinstance(captures, list):
+                for capture in captures:
+                    messages.append({
+                        'timestamp': timestamp,
+                        'utc': capture.get('Utc'),
+                        'racing_number': capture.get('RacingNumber'),
+                        'path': capture.get('Path')
+                    })
+            elif isinstance(captures, dict):
+                for key, capture in captures.items():
+                    messages.append({
+                        'timestamp': timestamp,
+                        'utc': capture.get('Utc'),
+                        'racing_number': capture.get('RacingNumber'),
+                        'path': capture.get('Path')
+                    })
+        except json.JSONDecodeError:
+            continue
+    
+    return messages
+
+def transcribe_audio(audio_url):
+    try:
+        response = requests.get(audio_url, timeout=30)
+        response.raise_for_status()
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_audio:
+            temp_audio.write(response.content)
+            temp_audio_path = temp_audio.name
+        
+        try:
+            if os.path.isfile(temp_audio_path):
+                transcript = whisper_model.transcribe(temp_audio_path)['text']
+                return transcript
+        finally:
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+    except Exception as e:
+        print(f"Error transcribing audio from {audio_url}: {str(e)}")
+        return None
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/drivers', methods=['GET'])
+def get_drivers(year, gp, session_type):
+    session_key, session_id, is_new = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('SELECT driver_code, driver_name FROM drivers WHERE sessionKey = ?', (session_key,))
+    db_drivers = c.fetchall()
+    
+    if db_drivers:
+        conn.close()
+        return jsonify([{'code': d[0], 'name': d[1]} for d in db_drivers])
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    drivers = session.drivers
+    
+    for driver_code in drivers:
+        c.execute('INSERT INTO drivers (sessionKey, driver_code, driver_name) VALUES (?, ?, ?)',
+                  (session_key, driver_code, driver_code))
+    
+    conn.commit()
+    conn.close()
+    return jsonify([{'code': d} for d in drivers])
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/telemetry/<driver_code>/<int:lap>', methods=['GET'])
+def get_telemetry(year, gp, session_type, driver_code, lap):
+    session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('''SELECT * FROM telemetry 
+                 WHERE sessionKey = ? AND driver_code = ? AND lap_number = ?
+                 ORDER BY session_time_ms''',
+              (session_key, driver_code, lap))
+    
+    db_telemetry = c.fetchall()
+    
+    if db_telemetry:
+        conn.close()
+        columns = ['sessionTime_ms', 'X', 'Y', 'nGear', 'Distance', 'Speed', 'Throttle', 'Brake', 'RPM', 'DRS', 'Compound']
+        telemetry_list = [dict(zip(columns, row[2:])) for row in db_telemetry]
+        return jsonify([{'lap_number': lap, 'telemetry': telemetry_list}])
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    laps = session.laps.pick_drivers(driver_code).pick_laps(lap)
+    
+    if laps.empty:
+        conn.close()
+        return jsonify({"error": "Driver not found"}), 404
+    
+    telemetry_data = []
+    for _, lap_row in laps.iterrows():
+        tyre = lap_row['Compound']
+        telemetry = lap_row.get_telemetry()
+        telemetry['Compound'] = tyre
+        telemetry['SessionTime_ms'] = telemetry['SessionTime'].dt.total_seconds() * 1000
+        
+        for _, tel_row in telemetry.iterrows():
+            c.execute('''INSERT INTO telemetry 
+                        (sessionKey, driver_code, lap_number, session_time_ms, x, y, gear, distance, speed, throttle, brake, rpm, drs, compound)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                      (session_key, driver_code, lap_row.LapNumber, tel_row['SessionTime_ms'], tel_row['X'], tel_row['Y'],
+                       tel_row['nGear'], tel_row['Distance'], tel_row['Speed'], tel_row['Throttle'], tel_row['Brake'],
+                       tel_row['RPM'], tel_row['DRS'], tyre))
+        
+        telemetry_data.append({
+            "lap_number": lap_row.LapNumber,
+            "telemetry": telemetry[['SessionTime_ms', 'X', 'Y', 'nGear', 'Distance', 'Speed', 'Throttle', 'Brake', 'RPM', 'DRS', 'Compound']].to_dict(orient='records')
+        })
+    
+    conn.commit()
+    conn.close()
+    return jsonify(telemetry_data)
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/info', methods=['GET'])
+def get_session_info(year, gp, session_type):
+    session_key, session_id, _ = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('SELECT * FROM sessions WHERE sessionKey = ?', (session_key,))
+    result = c.fetchone()
+    conn.close()
+    
+    if result:
+        return jsonify({
+            "year": result[2],
+            "grand_prix": result[3],
+            "session_type": result[4],
+            "date": result[5],
+            "circuit_name": result[6],
+            "location": result[7],
+            "number_of_laps": result[8]
+        })
+    
+    return jsonify({"error": "Session not found"}), 404
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/laps', methods=['GET'])
+def get_laps(year, gp, session_type):
+    session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('SELECT * FROM laps WHERE sessionKey = ?', (session_key,))
+    db_laps = c.fetchall()
+    
+    if db_laps:
+        conn.close()
+        columns = ['driver', 'driver_code', 'lap_number', 'lap_time', 'sector1_time', 'sector2_time', 'sector3_time', 'is_personal_best']
+        return jsonify([dict(zip(columns, lap[2:])) for lap in db_laps])
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    laps = session.laps
+    laps_df = laps[['Driver', 'LapNumber', 'LapTime', 'Sector1Time', 'Sector2Time', 'Sector3Time', 'IsPersonalBest']].copy()
+    
+    laps_df['LapTime'] = laps_df['LapTime'].apply(timedelta_to_seconds)
+    laps_df['Sector1Time'] = laps_df['Sector1Time'].apply(timedelta_to_seconds)
+    laps_df['Sector2Time'] = laps_df['Sector2Time'].apply(timedelta_to_seconds)
+    laps_df['Sector3Time'] = laps_df['Sector3Time'].apply(timedelta_to_seconds)
+    
+    for _, lap_row in laps_df.iterrows():
+        driver_code = laps[laps['Driver'] == lap_row['Driver']].iloc[0]['DriverNumber']
+        c.execute('''INSERT INTO laps 
+                    (sessionKey, driver, driver_code, lap_number, lap_time, sector1_time, sector2_time, sector3_time, is_personal_best)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (session_key, lap_row['Driver'], driver_code, lap_row['LapNumber'], lap_row['LapTime'],
+                   lap_row['Sector1Time'], lap_row['Sector2Time'], lap_row['Sector3Time'], lap_row['IsPersonalBest']))
+    
+    conn.commit()
+    conn.close()
+    return jsonify(laps_df.to_dict(orient='records'))
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/laps/<driver_code>', methods=['GET'])
+def get_driver_laps(year, gp, session_type, driver_code):
+    session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('SELECT * FROM laps WHERE sessionKey = ? AND driver_code = ?', (session_key, driver_code))
+    db_laps = c.fetchall()
+    
+    if db_laps:
+        conn.close()
+        columns = ['driver', 'driver_code', 'lap_number', 'lap_time', 'sector1_time', 'sector2_time', 'sector3_time', 'is_personal_best']
+        return jsonify([dict(zip(columns, lap[2:])) for lap in db_laps])
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    laps = session.laps.pick_drivers(driver_code)
+    
+    if laps.empty:
+        conn.close()
+        return jsonify({"error": "Driver not found"}), 404
+    
+    laps_df = laps[['Driver', 'LapNumber', 'LapTime', 'Sector1Time', 'Sector2Time', 'Sector3Time', 'IsPersonalBest']].copy()
+    laps_df['LapTime'] = laps_df['LapTime'].apply(timedelta_to_seconds)
+    laps_df['Sector1Time'] = laps_df['Sector1Time'].apply(timedelta_to_seconds)
+    laps_df['Sector2Time'] = laps_df['Sector2Time'].apply(timedelta_to_seconds)
+    laps_df['Sector3Time'] = laps_df['Sector3Time'].apply(timedelta_to_seconds)
+    
+    for _, lap_row in laps_df.iterrows():
+        c.execute('''INSERT INTO laps 
+                    (sessionKey, driver, driver_code, lap_number, lap_time, sector1_time, sector2_time, sector3_time, is_personal_best)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (session_key, lap_row['Driver'], driver_code, lap_row['LapNumber'], lap_row['LapTime'],
+                   lap_row['Sector1Time'], lap_row['Sector2Time'], lap_row['Sector3Time'], lap_row['IsPersonalBest']))
+    
+    conn.commit()
+    conn.close()
+    return jsonify(laps_df.to_dict(orient='records'))
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/pits', methods=['GET'])
+def get_pit_stops(year, gp, session_type):
+    session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('SELECT * FROM pit_stops WHERE sessionKey = ?', (session_key,))
+    db_pits = c.fetchall()
+    
+    if db_pits:
+        conn.close()
+        columns = ['driver', 'lap_number', 'pit_in_time', 'pit_out_time', 'duration']
+        return jsonify([dict(zip(columns, pit[2:])) for pit in db_pits])
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    laps = session.laps.sort_values(['Driver', 'LapNumber'])
+    pit_stops = laps[laps['PitOutTime'].notna()].copy()
+    pit_stops['PitInTime'] = laps.groupby('Driver')['PitInTime'].shift(1).loc[pit_stops.index]
+    pit_stops['Duration'] = pit_stops['PitOutTime'] - pit_stops['PitInTime']
+    pit_stops_df = pit_stops[['Driver', 'LapNumber', 'PitInTime', 'PitOutTime', 'Duration']].copy()
+    pit_stops_df['PitInTime'] = pit_stops_df['PitInTime'].apply(timedelta_to_seconds)
+    pit_stops_df['PitOutTime'] = pit_stops_df['PitOutTime'].apply(timedelta_to_seconds)
+    pit_stops_df['Duration'] = pit_stops_df['Duration'].apply(timedelta_to_seconds)
+    
+    for _, pit_row in pit_stops_df.iterrows():
+        c.execute('''INSERT INTO pit_stops 
+                    (sessionKey, driver, lap_number, pit_in_time, pit_out_time, duration)
+                    VALUES (?, ?, ?, ?, ?, ?)''',
+                  (session_key, pit_row['Driver'], pit_row['LapNumber'], pit_row['PitInTime'],
+                   pit_row['PitOutTime'], pit_row['Duration']))
+    
+    conn.commit()
+    conn.close()
+    return jsonify(pit_stops_df.to_dict(orient='records'))
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/messages', methods=['GET'])
+def get_messages(year, gp, session_type):
+    session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('SELECT * FROM messages WHERE sessionKey = ?', (session_key,))
+    db_messages = c.fetchall()
+    
+    if db_messages:
+        conn.close()
+        columns = ['time', 'category', 'message', 'status', 'flag', 'scope', 'sector', 'racing_number', 'lap']
+        return jsonify([dict(zip(columns, msg[2:])) for msg in db_messages])
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load(messages=True)
+    messages = session.race_control_messages
+    messages_df = messages[['Time', 'Category', 'Message', 'Status', 'Flag', 'Scope', 'Sector', 'RacingNumber', 'Lap']].copy()
+    
+    for _, msg_row in messages_df.iterrows():
+        c.execute('''INSERT INTO messages 
+                    (sessionKey, time, category, message, status, flag, scope, sector, racing_number, lap)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (session_key, timedelta_to_seconds(msg_row['Time']), msg_row['Category'], msg_row['Message'],
+                   msg_row['Status'], msg_row['Flag'], msg_row['Scope'], msg_row['Sector'], msg_row['RacingNumber'], msg_row['Lap']))
+    
+    conn.commit()
+    conn.close()
+    return jsonify(messages_df.to_dict(orient='records'))
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/weather', methods=['GET'])
+def get_weather(year, gp, session_type):
+    session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    c.execute('SELECT * FROM weather WHERE sessionKey = ?', (session_key,))
+    db_weather = c.fetchall()
+    
+    if db_weather:
+        conn.close()
+        columns = ['time', 'rainfall']
+        return jsonify([dict(zip(columns, w[2:])) for w in db_weather])
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load(weather=True)
+    weather = session.weather_data
+    weather_df = weather[['Time', 'Rainfall']].copy()
+    weather_df['Time'] = weather_df['Time'].apply(timedelta_to_seconds)
+    
+    for _, weather_row in weather_df.iterrows():
+        c.execute('INSERT INTO weather (sessionKey, time, rainfall) VALUES (?, ?, ?)',
+                  (session_key, weather_row['Time'], weather_row['Rainfall']))
+    
+    conn.commit()
+    conn.close()
+    return jsonify(weather_df.to_dict(orient='records'))
+
+@app.route('/api/v1/sessions/<int:year>/events', methods=['GET'])
+def get_events(year):
+    events = fastf1.get_event_schedule(year)
+    events_df = events[['RoundNumber', 'EventName', 'EventDate']].copy()
+    return jsonify(events_df.to_dict(orient='records'))
+
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/radios', methods=['GET'])
+def get_radios(year, gp, session_type):
+    try:
+        session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        
+        should_transcribe = request.args.get('transcribe', 'true').lower() == 'true'
+        driver_filter = request.args.get('driver', None)
+        
+        query = 'SELECT * FROM radios WHERE sessionKey = ?'
+        params = [session_key]
+        
+        if driver_filter:
+            query += ' AND racing_number = ?'
+            params.append(driver_filter)
+        
+        c.execute(query, params)
+        db_radios = c.fetchall()
+        
+        if db_radios:
+            conn.close()
+            columns = ['timestamp', 'utc', 'racing_number', 'audio_url', 'transcript']
+            results = [dict(zip(columns, radio[2:])) for radio in db_radios]
+            return jsonify({'total_messages': len(results), 'messages': results})
+        
+        session_path = get_session_path(year, gp, session_type)
+        base_url = "https://livetiming.formula1.com/static/"
+        jsonstream_url = f"{base_url}{session_path}TeamRadio.jsonStream"
+        
+        print(f"Fetching radio data from: {jsonstream_url}")
+        response = requests.get(jsonstream_url, timeout=30)
+        response.raise_for_status()
+        
+        messages = parse_jsonstream(response.text)
+        
+        if driver_filter:
+            messages = [m for m in messages if m['racing_number'] == driver_filter]
+        
+        results = []
+        for msg in messages:
+            audio_url = f"{base_url}{session_path}{msg['path']}"
+            transcript = None
+            
+            if should_transcribe:
+                print(f"Transcribing radio for driver {msg['racing_number']}...")
+                transcript = transcribe_audio(audio_url)
+            
+            c.execute('''INSERT INTO radios 
+                        (sessionKey, timestamp, utc, racing_number, audio_url, transcript)
+                        VALUES (?, ?, ?, ?, ?, ?)''',
+                      (session_key, msg['timestamp'], msg['utc'], msg['racing_number'], audio_url, transcript))
+            
+            results.append({
+                'timestamp': msg['timestamp'],
+                'utc': msg['utc'],
+                'racing_number': msg['racing_number'],
+                'audio_url': audio_url,
+                'transcript': transcript
+            })
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'session_path': session_path, 'total_messages': len(results), 'messages': results})
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"Failed to fetch radio data: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error processing radio data: {str(e)}"}), 500
+
+if __name__ == '__main__':
+    init_db()
+    app.run(debug=True)
