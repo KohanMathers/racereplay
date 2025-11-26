@@ -10,16 +10,22 @@ import os
 import importlib
 import sqlite3
 from datetime import datetime
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 
+load_dotenv()
+TRANSCRIBE_API_KEY = os.getenv('TRANSCRIBE_API_KEY')
+
 whisper = importlib.import_module('whisper')
-whisper_model = whisper.load_model("medium")
+whisper_model = whisper.load_model("turbo")
 
 DB_PATH = 'f1_data.db'
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=5000')
     c = conn.cursor()
     
     c.execute('''CREATE TABLE IF NOT EXISTS sessions (
@@ -125,16 +131,14 @@ def init_db():
     conn.commit()
     conn.close()
 
-def get_session_id(year, gp, session_type):
+def get_or_create_session_key(year, gp, session_type):
     session = fastf1.get_session(year, gp, session_type)
-    session.load()
+    
     date_str = session.date.strftime('%d-%m-%Y')
     gp_upper = gp.upper()
     session_type_upper = session_type.upper()
-    return f"{date_str}-{gp_upper}-{session_type_upper}"
-
-def get_or_create_session_key(year, gp, session_type):
-    session_id = get_session_id(year, gp, session_type)
+    session_id = f"{date_str}-{gp_upper}-{session_type_upper}"
+    
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
@@ -145,7 +149,6 @@ def get_or_create_session_key(year, gp, session_type):
         conn.close()
         return result[0], session_id, False
     
-    session = fastf1.get_session(year, gp, session_type)
     session.load()
     
     session_info = session.session_info
@@ -156,7 +159,7 @@ def get_or_create_session_key(year, gp, session_type):
                session_info['Meeting']['Circuit']['ShortName'],
                session_info['Meeting']['Country']['Name'],
                session.total_laps,
-               session_info['Meeting']['EventName']))
+               session_info['Meeting']['Name']))
     
     conn.commit()
     session_key = c.lastrowid
@@ -235,6 +238,101 @@ def transcribe_audio(audio_url):
     except Exception as e:
         print(f"Error transcribing audio from {audio_url}: {str(e)}")
         return None
+
+def transcribe_session_radios(year, gp, session_type):
+    try:
+        session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+        session_path = get_session_path(year, gp, session_type)
+        base_url = "https://livetiming.formula1.com/static/"
+        jsonstream_url = f"{base_url}{session_path}TeamRadio.jsonStream"
+        
+        print(f"Fetching radio data for {year} {gp} {session_type}...")
+        response = requests.get(jsonstream_url, timeout=30)
+        response.raise_for_status()
+        
+        messages = parse_jsonstream(response.text)
+        
+        transcribed_count = 0
+        for msg in messages:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            
+            audio_url = f"{base_url}{session_path}{msg['path']}"
+            
+            c.execute('SELECT transcript FROM radios WHERE sessionKey = ? AND audio_url = ?', 
+                     (session_key, audio_url))
+            existing = c.fetchone()
+            
+            if existing and existing[0]:
+                print(f"Already transcribed: {msg['racing_number']} - skipping")
+                conn.close()
+                continue
+            
+            print(f"Transcribing radio for driver {msg['racing_number']}...")
+            transcript = transcribe_audio(audio_url)
+            
+            if existing:
+                c.execute('UPDATE radios SET transcript = ? WHERE sessionKey = ? AND audio_url = ?',
+                         (transcript, session_key, audio_url))
+            else:
+                c.execute('''INSERT INTO radios 
+                            (sessionKey, timestamp, utc, racing_number, audio_url, transcript)
+                            VALUES (?, ?, ?, ?, ?, ?)''',
+                         (session_key, msg['timestamp'], msg['utc'], msg['racing_number'], audio_url, transcript))
+            
+            transcribed_count += 1
+            conn.commit()
+            conn.close()
+        
+        return {
+            'year': year,
+            'gp': gp,
+            'session_type': session_type,
+            'total_messages': len(messages),
+            'transcribed': transcribed_count
+        }
+        
+    except Exception as e:
+        print(f"Error transcribing session {year} {gp} {session_type}: {str(e)}")
+        return None
+
+@app.route('/api/v1/transcribe/year', methods=['POST'])
+def transcribe_year():
+    api_key = request.headers.get('X-API-Key')
+    
+    if not api_key or api_key != TRANSCRIBE_API_KEY:
+        return jsonify({"error": "Unauthorized - Invalid or missing API key"}), 401
+    
+    data = request.get_json()
+    if not data or 'year' not in data:
+        return jsonify({"error": "Year is required in request body"}), 400
+    
+    year = data['year']
+    
+    try:
+        events = fastf1.get_event_schedule(year)
+        results = []
+        
+        for _, event in events.iterrows():
+            gp = event['EventName']
+            
+            for session_type in ['Race', 'Qualifying', 'Sprint']:
+                try:
+                    result = transcribe_session_radios(year, gp, session_type)
+                    if result:
+                        results.append(result)
+                except Exception as e:
+                    print(f"Skipping {gp} {session_type}: {str(e)}")
+                    continue
+        
+        return jsonify({
+            "year": year,
+            "total_sessions_processed": len(results),
+            "sessions": results
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error processing year {year}: {str(e)}"}), 500
 
 @app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/drivers', methods=['GET'])
 def get_drivers(year, gp, session_type):
@@ -469,7 +567,7 @@ def get_messages(year, gp, session_type):
         c.execute('''INSERT INTO messages 
                     (sessionKey, time, category, message, status, flag, scope, sector, racing_number, lap)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                  (session_key, timedelta_to_seconds(msg_row['Time']), msg_row['Category'], msg_row['Message'],
+                  (session_key, str(msg_row['Time']), msg_row['Category'], msg_row['Message'],
                    msg_row['Status'], msg_row['Flag'], msg_row['Scope'], msg_row['Sector'], msg_row['RacingNumber'], msg_row['Lap']))
     
     conn.commit()
@@ -517,7 +615,6 @@ def get_radios(year, gp, session_type):
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         
-        should_transcribe = request.args.get('transcribe', 'true').lower() == 'true'
         driver_filter = request.args.get('driver', None)
         
         query = 'SELECT * FROM radios WHERE sessionKey = ?'
@@ -529,58 +626,19 @@ def get_radios(year, gp, session_type):
         
         c.execute(query, params)
         db_radios = c.fetchall()
-        
-        if db_radios:
-            conn.close()
-            columns = ['timestamp', 'utc', 'racing_number', 'audio_url', 'transcript']
-            results = [dict(zip(columns, radio[2:])) for radio in db_radios]
-            return jsonify({'total_messages': len(results), 'messages': results})
-        
-        session_path = get_session_path(year, gp, session_type)
-        base_url = "https://livetiming.formula1.com/static/"
-        jsonstream_url = f"{base_url}{session_path}TeamRadio.jsonStream"
-        
-        print(f"Fetching radio data from: {jsonstream_url}")
-        response = requests.get(jsonstream_url, timeout=30)
-        response.raise_for_status()
-        
-        messages = parse_jsonstream(response.text)
-        
-        if driver_filter:
-            messages = [m for m in messages if m['racing_number'] == driver_filter]
-        
-        results = []
-        for msg in messages:
-            audio_url = f"{base_url}{session_path}{msg['path']}"
-            transcript = None
-            
-            if should_transcribe:
-                print(f"Transcribing radio for driver {msg['racing_number']}...")
-                transcript = transcribe_audio(audio_url)
-            
-            c.execute('''INSERT INTO radios 
-                        (sessionKey, timestamp, utc, racing_number, audio_url, transcript)
-                        VALUES (?, ?, ?, ?, ?, ?)''',
-                      (session_key, msg['timestamp'], msg['utc'], msg['racing_number'], audio_url, transcript))
-            
-            results.append({
-                'timestamp': msg['timestamp'],
-                'utc': msg['utc'],
-                'racing_number': msg['racing_number'],
-                'audio_url': audio_url,
-                'transcript': transcript
-            })
-        
-        conn.commit()
         conn.close()
         
-        return jsonify({'session_path': session_path, 'total_messages': len(results), 'messages': results})
+        if not db_radios:
+            return jsonify({'total_messages': 0, 'messages': None})
         
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to fetch radio data: {str(e)}"}), 500
+        columns = ['timestamp', 'utc', 'racing_number', 'audio_url', 'transcript']
+        results = [dict(zip(columns, radio[2:])) for radio in db_radios]
+        
+        return jsonify({'total_messages': len(results), 'messages': results})
+        
     except Exception as e:
-        return jsonify({"error": f"Error processing radio data: {str(e)}"}), 500
+        return jsonify({"error": f"Error fetching radio data: {str(e)}"}), 500
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    app.run(debug=False)
