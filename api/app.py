@@ -34,7 +34,7 @@ def normalize_gp_name(gp, year):
     gp_map = {
         'bahrain': 'Bahrain Grand Prix',
         'saudi_arabia': 'Saudi Arabian Grand Prix',
-        'australia'
+        'australia': 'Australian Grand Prix',
         'japan': 'Japanese Grand Prix',
         'china': 'Chinese Grand Prix',
         'miami': 'Miami Grand Prix',
