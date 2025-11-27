@@ -398,6 +398,43 @@ def transcribe_year():
     except Exception as e:
         return jsonify({"error": f"Error processing year {year}: {str(e)}"}), 500
 
+@app.route('/api/v1/transcribe/gp', methods=['POST'])
+def transcribe_gp():
+    api_key = request.headers.get('X-API-Key')
+    
+    if not api_key or api_key != TRANSCRIBE_API_KEY:
+        return jsonify({"error": "Unauthorized - Invalid or missing API key"}), 401
+    
+    data = request.get_json()
+    if not data or 'year' not in data or 'gp' not in data:
+        return jsonify({"error": "Year and gp are required in request body"}), 400
+    
+    year = data['year']
+    gp = data['gp']
+    
+    try:
+        normalized_gp = normalize_gp_name(gp, year)
+        results = []
+        
+        for session_type in ['Race', 'Qualifying', 'Sprint']:
+            try:
+                result = transcribe_session_radios(year, normalized_gp, session_type)
+                if result:
+                    results.append(result)
+            except Exception as e:
+                print(f"Skipping {normalized_gp} {session_type}: {str(e)}")
+                continue
+        
+        return jsonify({
+            "year": year,
+            "gp": normalized_gp,
+            "total_sessions_processed": len(results),
+            "sessions": results
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error processing {year} {gp}: {str(e)}"}), 500
+
 @app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/drivers', methods=['GET'])
 def get_drivers(year, gp, session_type):
     session_key, session_id, is_new = get_or_create_session_key(year, gp, session_type)
