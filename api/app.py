@@ -714,7 +714,7 @@ def get_radios(year, gp, session_type):
     try:
         normalized_session_type = normalize_session_type(session_type)
         normalized_gp = normalize_gp_name(gp, year)
-        session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+        session_key, _, _ = get_or_create_session_key(year, normalized_gp, normalized_session_type)
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         
