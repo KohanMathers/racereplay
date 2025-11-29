@@ -113,6 +113,7 @@ def init_db():
         driver_name TEXT,
         driver_number INTEGER,
         driver_abbreviation TEXT,
+        driver_team TEXT,
         FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
     )''')
     
@@ -468,13 +469,13 @@ def get_driver_by_number(year, gp, session_type, number):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    c.execute('SELECT driver_code, driver_name, driver_abbreviation FROM drivers WHERE sessionKey = ? AND driver_number = ?', 
+    c.execute('SELECT driver_code, driver_name, driver_abbreviation, driver_team FROM drivers WHERE sessionKey = ? AND driver_number = ?', 
               (session_key, number))
     result = c.fetchone()
     
     if result:
         conn.close()
-        return jsonify({'code': result[0], 'name': result[1], 'abbreviation': result[2]})
+        return jsonify({'code': result[0], 'name': result[1], 'abbreviation': result[2], 'team': result[3]})
     
     session = fastf1.get_session(year, gp, session_type)
     session.load()
@@ -483,9 +484,9 @@ def get_driver_by_number(year, gp, session_type, number):
     for driver_code in session.drivers:
         driver = session.get_driver(driver_code)
         if str(driver['DriverNumber']) == str(number):
-            driver_info = {'code': driver_code, 'name': driver['FullName'], 'abbreviation': driver['Abbreviation']}
-            c.execute('INSERT INTO drivers (sessionKey, driver_code, driver_name, driver_number, driver_abbreviation) VALUES (?, ?, ?, ?, ?)',
-                      (session_key, driver_code, driver['FullName'], number, driver['Abbreviation']))
+            driver_info = {'code': driver_code, 'name': driver['FullName'], 'abbreviation': driver['Abbreviation'],  'team': driver['TeamName']}
+            c.execute('INSERT INTO drivers (sessionKey, driver_code, driver_name, driver_number, driver_abbreviation, driver_team) VALUES (?, ?, ?, ?, ?, ?)',
+                      (session_key, driver_code, driver['FullName'], number, driver['Abbreviation'], driver['TeamName']))
             break
     
     conn.commit()
