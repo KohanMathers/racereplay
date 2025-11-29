@@ -3,6 +3,7 @@ package com.racereplay.racereplayserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.racereplay.racereplayserver.data.DataModelType;
 import com.racereplay.racereplayserver.data.SessionType;
 import com.racereplay.racereplayserver.data.TrackName;
 import com.racereplay.racereplayserver.network.F1ApiClient;
@@ -56,7 +57,7 @@ public class RaceReplayServer {
     }
 
     private static void testApiClients() {
-        F1ApiClient client = new F1ApiClient("https://racereplay.kmathers.co.uk/api/v1/sessions", 2024, TrackName.SILVERSTONE, SessionType.R, "drivers");
+        F1ApiClient client = new F1ApiClient("https://racereplay.kmathers.co.uk/api/v1/sessions", 2024, TrackName.SILVERSTONE, SessionType.R, "drivers", DataModelType.NULL);
         if (client != null) {
             logger.info("F1 API Client is working!");
         }

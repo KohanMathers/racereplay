@@ -111,6 +111,8 @@ def init_db():
         sessionKey INTEGER,
         driver_code TEXT,
         driver_name TEXT,
+        driver_number INTEGER,
+        driver_abbreviation TEXT,
         FOREIGN KEY(sessionKey) REFERENCES sessions(sessionKey)
     )''')
     
@@ -460,6 +462,41 @@ def get_drivers(year, gp, session_type):
     conn.close()
     return jsonify([{'code': d} for d in drivers])
 
+@app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/drivers/<int:number>', methods=['GET'])
+def get_driver_by_number(year, gp, session_type, number):
+    session_key, session_id, is_new = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    c.execute('SELECT driver_code, driver_name, driver_abbreviation FROM drivers WHERE sessionKey = ? AND driver_number = ?', 
+              (session_key, number))
+    result = c.fetchone()
+    
+    if result:
+        conn.close()
+        return jsonify({'code': result[0], 'name': result[1], 'abbreviation': result[2]})
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    
+    driver_info = None
+    for driver_code in session.drivers:
+        driver = session.get_driver(driver_code)
+        if str(driver['DriverNumber']) == str(number):
+            driver_info = {'code': driver_code, 'name': driver['FullName'], 'abbreviation': driver['Abbreviation']}
+            c.execute('INSERT INTO drivers (sessionKey, driver_code, driver_name, driver_number, driver_abbreviation) VALUES (?, ?, ?, ?, ?)',
+                      (session_key, driver_code, driver['FullName'], number, driver['Abbreviation']))
+            break
+    
+    conn.commit()
+    conn.close()
+    
+    if driver_info:
+        return jsonify(driver_info)
+    else:
+        return jsonify({'error': 'Driver not found'}), 404
+
+
 @app.route('/api/v1/sessions/<int:year>/<gp>/<session_type>/telemetry/<driver_code>/<int:lap>', methods=['GET'])
 def get_telemetry(year, gp, session_type, driver_code, lap):
     session_key, _, _ = get_or_create_session_key(year, gp, session_type)
@@ -475,7 +512,7 @@ def get_telemetry(year, gp, session_type, driver_code, lap):
     
     if db_telemetry:
         conn.close()
-        columns = ['sessionTime_ms', 'X', 'Y', 'nGear', 'Distance', 'Speed', 'Throttle', 'Brake', 'RPM', 'DRS', 'Compound']
+        columns = ['session_time_ms', 'x', 'y', 'gear', 'distance', 'speed', 'throttle', 'brake', 'rpm', 'drs', 'compound']
         telemetry_list = [dict(zip(columns, row[2:])) for row in db_telemetry]
         return jsonify([{'lap_number': lap, 'telemetry': telemetry_list}])
     
