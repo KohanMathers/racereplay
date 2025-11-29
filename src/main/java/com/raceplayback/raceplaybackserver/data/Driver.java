@@ -1,4 +1,4 @@
-package com.racereplay.racereplayserver.data;
+package com.raceplayback.raceplaybackserver.data;
 
 public record Driver(
     String name,

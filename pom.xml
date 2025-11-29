@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.racereplay</groupId>
-    <artifactId>RaceReplayServer</artifactId>
+    <groupId>com.raceplayback</groupId>
+    <artifactId>RacePlaybackServer</artifactId>
     <version>0.1-ALPHA</version>
     <packaging>jar</packaging>
 
@@ -53,7 +53,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.racereplay.racereplayserver.RaceReplayServer</mainClass>
+                                    <mainClass>com.raceplayback.raceplaybackserver.RacePlaybackServer</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>

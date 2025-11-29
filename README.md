@@ -1,6 +1,6 @@
-# RaceReplay
+# RacePlayback
 
-RaceReplay is an ambitious F1 replay ecosystem combining:
+RacePlayback is an ambitious F1 replay ecosystem combining:
 
 * Python API server for session data, telemetry, and team radio
 * Minestom server for 1:1 scaled Minecraft race replays
@@ -55,8 +55,8 @@ This project turns publicly available F1 telemetry and radio feeds into a fully 
 1. Clone the repository
 
 ```bash
-git clone https://github.com/kohanmathers/racereplay.git
-cd racereplay
+git clone https://github.com/kohanmathers/raceplayback.git
+cd raceplayback
 ```
 
 2. Set up Python API
