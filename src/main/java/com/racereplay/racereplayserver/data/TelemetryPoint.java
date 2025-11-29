@@ -13,7 +13,8 @@ public record TelemetryPoint(
     BigDecimal speed,
     BigDecimal throttle,
     BigDecimal x,
-    BigDecimal y
+    BigDecimal y,
+    int gear
 ) {
     public TelemetryPoint {
         distance = distance.setScale(4, RoundingMode.HALF_UP);
