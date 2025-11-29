@@ -667,8 +667,16 @@ def get_driver_laps(year, gp, session_type, driver_code):
     
     if db_laps:
         conn.close()
-        columns = ['driver', 'driver_code', 'lap_number', 'lap_time', 'sector1_time', 'sector2_time', 'sector3_time', 'is_personal_best']
-        return jsonify([dict(zip(columns, lap[2:])) for lap in db_laps])
+        db_columns = ['driver', 'driver_code', 'lap_number', 'lap_time', 'sector1_time', 'sector2_time', 'sector3_time', 'is_personal_best']
+        output_columns = ['Driver', 'DriverCode', 'LapNumber', 'LapTime', 'Sector1Time', 'Sector2Time', 'Sector3Time', 'IsPersonalBest']
+        
+        laps_list = []
+        for lap in db_laps:
+            lap_dict = dict(zip(output_columns, lap[2:]))
+            lap_dict['IsPersonalBest'] = bool(lap_dict['IsPersonalBest'])
+            laps_list.append(lap_dict)
+        
+        return jsonify(laps_list)
     
     session = fastf1.get_session(year, gp, session_type)
     session.load()
