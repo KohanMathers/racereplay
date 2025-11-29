@@ -588,7 +588,7 @@ def get_laps(year, gp, session_type):
     session = fastf1.get_session(year, gp, session_type)
     session.load()
     laps = session.laps
-    laps_df = laps[['Driver', 'LapNumber', 'LapTime', 'Sector1Time', 'Sector2Time', 'Sector3Time', 'IsPersonalBest']].copy()
+    laps_df = laps[['Driver', 'DriverNumber', 'LapNumber', 'LapTime', 'Sector1Time', 'Sector2Time', 'Sector3Time', 'IsPersonalBest']].copy()
     
     laps_df['LapTime'] = laps_df['LapTime'].apply(timedelta_to_seconds)
     laps_df['Sector1Time'] = laps_df['Sector1Time'].apply(timedelta_to_seconds)
@@ -596,12 +596,54 @@ def get_laps(year, gp, session_type):
     laps_df['Sector3Time'] = laps_df['Sector3Time'].apply(timedelta_to_seconds)
     
     for _, lap_row in laps_df.iterrows():
-        driver_code = laps[laps['Driver'] == lap_row['Driver']].iloc[0]['DriverNumber']
+        driver_code = int(lap_row['DriverNumber'])
         c.execute('''INSERT INTO laps 
                     (sessionKey, driver, driver_code, lap_number, lap_time, sector1_time, sector2_time, sector3_time, is_personal_best)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                  (session_key, lap_row['Driver'], driver_code, lap_row['LapNumber'], lap_row['LapTime'],
-                   lap_row['Sector1Time'], lap_row['Sector2Time'], lap_row['Sector3Time'], lap_row['IsPersonalBest']))
+                  (session_key, lap_row['Driver'], driver_code, int(lap_row['LapNumber']), lap_row['LapTime'],
+                   lap_row['Sector1Time'], lap_row['Sector2Time'], lap_row['Sector3Time'], int(lap_row['IsPersonalBest'])))
+    
+    conn.commit()
+    conn.close()
+    return jsonify(laps_df.to_dict(orient='records'))
+
+
+def get_driver_laps(year, gp, session_type, driver_code):
+    session_key, _, _ = get_or_create_session_key(year, gp, session_type)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    driver_code_int = int(driver_code) if isinstance(driver_code, str) and driver_code.isdigit() else driver_code
+    
+    c.execute('SELECT * FROM laps WHERE sessionKey = ? AND driver_code = ?', (session_key, driver_code_int))
+    db_laps = c.fetchall()
+    
+    if db_laps:
+        conn.close()
+        columns = ['driver', 'driver_code', 'lap_number', 'lap_time', 'sector1_time', 'sector2_time', 'sector3_time', 'is_personal_best']
+        return jsonify([dict(zip(columns, lap[2:])) for lap in db_laps])
+    
+    session = fastf1.get_session(year, gp, session_type)
+    session.load()
+    laps = session.laps.pick_drivers(driver_code)
+    
+    if laps.empty:
+        conn.close()
+        return jsonify({"error": "Driver not found"}), 404
+    
+    laps_df = laps[['Driver', 'DriverNumber', 'LapNumber', 'LapTime', 'Sector1Time', 'Sector2Time', 'Sector3Time', 'IsPersonalBest']].copy()
+    laps_df['LapTime'] = laps_df['LapTime'].apply(timedelta_to_seconds)
+    laps_df['Sector1Time'] = laps_df['Sector1Time'].apply(timedelta_to_seconds)
+    laps_df['Sector2Time'] = laps_df['Sector2Time'].apply(timedelta_to_seconds)
+    laps_df['Sector3Time'] = laps_df['Sector3Time'].apply(timedelta_to_seconds)
+    
+    for _, lap_row in laps_df.iterrows():
+        driver_code_int = int(lap_row['DriverNumber'])
+        c.execute('''INSERT INTO laps 
+                    (sessionKey, driver, driver_code, lap_number, lap_time, sector1_time, sector2_time, sector3_time, is_personal_best)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (session_key, lap_row['Driver'], driver_code_int, int(lap_row['LapNumber']), lap_row['LapTime'],
+                   lap_row['Sector1Time'], lap_row['Sector2Time'], lap_row['Sector3Time'], int(lap_row['IsPersonalBest'])))
     
     conn.commit()
     conn.close()
