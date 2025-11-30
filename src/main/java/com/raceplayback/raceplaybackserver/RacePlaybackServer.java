@@ -22,6 +22,10 @@ import net.minestom.server.instance.block.Block;
 import net.minestom.server.item.ItemStack;
 import net.minestom.server.coordinate.Pos;
 
+import org.everbuild.blocksandstuff.blocks.BlockPlacementRuleRegistrations;
+import org.everbuild.blocksandstuff.blocks.BlockBehaviorRuleRegistrations;
+import org.everbuild.blocksandstuff.blocks.PlacedHandlerRegistration;
+
 public class RacePlaybackServer {
 
     private static RacePlaybackServer instance;
@@ -50,6 +54,10 @@ public class RacePlaybackServer {
         instanceContainer.setGenerator(unit -> unit.modifier().fillHeight(0, 40, Block.GRASS_BLOCK));
 
         instanceContainer.setChunkSupplier(LightingChunk::new);
+
+        BlockPlacementRuleRegistrations.registerDefault();
+        BlockBehaviorRuleRegistrations.registerDefault();
+        PlacedHandlerRegistration.registerDefault();
 
         GlobalEventHandler globalEventHandler = MinecraftServer.getGlobalEventHandler();
         globalEventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
@@ -99,5 +107,5 @@ public class RacePlaybackServer {
         }
         
         logger.info("All test wheels spawned!");
-}
+    }
 }
