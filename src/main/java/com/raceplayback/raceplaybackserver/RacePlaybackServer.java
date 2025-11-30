@@ -3,6 +3,7 @@ package com.raceplayback.raceplaybackserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.raceplayback.raceplaybackserver.data.Compound;
 import com.raceplayback.raceplaybackserver.data.DataModelType;
 import com.raceplayback.raceplaybackserver.data.SessionType;
 import com.raceplayback.raceplaybackserver.data.TrackName;
@@ -10,11 +11,15 @@ import com.raceplayback.raceplaybackserver.network.F1ApiClient;
 
 import net.minestom.server.Auth;
 import net.minestom.server.MinecraftServer;
+import net.minestom.server.entity.EntityType;
+import net.minestom.server.entity.GameMode;
 import net.minestom.server.entity.Player;
+import net.minestom.server.entity.metadata.display.ItemDisplayMeta;
 import net.minestom.server.event.GlobalEventHandler;
 import net.minestom.server.event.player.AsyncPlayerConfigurationEvent;
 import net.minestom.server.instance.*;
 import net.minestom.server.instance.block.Block;
+import net.minestom.server.item.ItemStack;
 import net.minestom.server.coordinate.Pos;
 
 public class RacePlaybackServer {
@@ -44,14 +49,18 @@ public class RacePlaybackServer {
 
         instanceContainer.setGenerator(unit -> unit.modifier().fillHeight(0, 40, Block.GRASS_BLOCK));
 
+        instanceContainer.setChunkSupplier(LightingChunk::new);
+
         GlobalEventHandler globalEventHandler = MinecraftServer.getGlobalEventHandler();
         globalEventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
             final Player player = event.getPlayer();
             event.setSpawningInstance(instanceContainer);
             player.setRespawnPoint(new Pos(0, 42, 0));
+            player.setGameMode(GameMode.CREATIVE);
         });
 
         testApiClients();
+        spawnTestWheels(instanceContainer);
 
         minecraftServer.start("0.0.0.0", 25565);
     }
@@ -62,4 +71,33 @@ public class RacePlaybackServer {
             logger.info("F1 API Client is working!");
         }
     }
+
+    private static void spawnTestWheels(InstanceContainer instance) {
+        logger.info("Spawning test wheels...");
+        
+        int x = 0;
+        for (Compound compound : Compound.values()) {
+            var frontWheel = new net.minestom.server.entity.Entity(EntityType.ITEM_DISPLAY);
+            ItemStack frontItem = compound.createWheel(true);
+            
+            ItemDisplayMeta meta = (ItemDisplayMeta) frontWheel.getEntityMeta();
+            meta.setItemStack(frontItem);
+            meta.setHasNoGravity(true);
+            
+            frontWheel.setInstance(instance, new Pos(x, 42, 0));
+            
+            var rearWheel = new net.minestom.server.entity.Entity(EntityType.ITEM_DISPLAY);
+            ItemStack rearItem = compound.createWheel(false);
+            
+            ItemDisplayMeta rearMeta = (ItemDisplayMeta) rearWheel.getEntityMeta();
+            rearMeta.setItemStack(rearItem);
+            rearMeta.setHasNoGravity(true);
+            
+            rearWheel.setInstance(instance, new Pos(x, 42, 1));
+            
+            x += 1;
+        }
+        
+        logger.info("All test wheels spawned!");
+}
 }
