@@ -139,7 +139,7 @@ Python API Server                  Minestom Server
 - AdamixGaming, Jerpix, NotGatoz - Original F1 car chassis models
   - [Download on Modrinth](https://modrinth.com/user/AdamixGaming/resourcepacks)
   - [Download on PlanetMinecraft](https://www.planetminecraft.com/member/adamixgaming/)
-  - Modified for RaceReplay use (wheels removed for separate rotation entities)
+  - Modified for RacePlayback use (wheels removed for separate rotation entities)
 
 ### Data & APIs
 - FastF1 - Python library for F1 telemetry data access
