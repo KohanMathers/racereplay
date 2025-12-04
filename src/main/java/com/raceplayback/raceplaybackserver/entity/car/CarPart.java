@@ -31,12 +31,28 @@ public abstract class CarPart {
     
     public void spawn(Instance instance, Pos carPosition, float yaw) {
         Pos partPosition = calculatePosition(carPosition, yaw);
-        entity.setInstance(instance, partPosition.withYaw(yaw));
+        entity.setInstance(instance, partPosition);
+        updateRotation(yaw);
     }
-    
+
     public void update(Pos carPosition, float yaw) {
         Pos partPosition = calculatePosition(carPosition, yaw);
-        entity.teleport(partPosition.withYaw(yaw));
+        entity.teleport(partPosition);
+        updateRotation(yaw);
+    }
+
+    protected void updateRotation(float yaw) {
+        ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
+        meta.setLeftRotation(createYawRotation(yaw));
+    }
+
+    private float[] createYawRotation(float yaw) {
+        float rad = (float) Math.toRadians(-yaw);
+        float halfAngle = rad / 2.0f;
+        float sin = (float) Math.sin(halfAngle);
+        float cos = (float) Math.cos(halfAngle);
+
+        return new float[] {0.0f, sin, 0.0f, cos};
     }
     
     public void remove() {

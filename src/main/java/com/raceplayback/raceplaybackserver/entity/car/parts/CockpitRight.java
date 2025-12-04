@@ -5,8 +5,6 @@ import net.minestom.server.coordinate.Vec;
 
 public class CockpitRight extends CarPart {
     public CockpitRight() {
-        super("cockpit_right", new Vec(1, 0.5, 0));
-        setCustomScale(new Vec(1.6f, 0.96f, 1.5f));
-        entity.setView(180, 0);
+        super("cockpit_right", new Vec(-0.5, 0.5, 0));
     }
 }
