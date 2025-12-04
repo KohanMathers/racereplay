@@ -65,7 +65,7 @@ public class RacePlaybackServer {
             player.setGameMode(GameMode.CREATIVE);
         });
 
-        testApiClients();
+//        testApiClients();
         spawnTestCar(instanceContainer);
 
         minecraftServer.start("0.0.0.0", 25565);
