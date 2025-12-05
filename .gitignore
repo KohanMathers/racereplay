@@ -2,3 +2,4 @@ venv/
 .env
 target/
 f1_data.db
+website/

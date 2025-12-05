@@ -10,7 +10,7 @@ public class RearWing extends CarPart {
     private boolean drsOpen = false;
     
     public RearWing() {
-        super("rear_wing_closed", new Vec(0, 1.2, -2.0));
+        super("rear_wing_closed", new Vec(0, 1.063, -2.3125));
     }
     
     public void setDRS(boolean open) {

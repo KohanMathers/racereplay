@@ -5,6 +5,7 @@ import net.minestom.server.coordinate.Vec;
 
 public class RearChassisCentre extends CarPart {
     public RearChassisCentre() {
-        super("rear_chassis_centre", new Vec(0, 0.5, -0.8));
+        super("rear_chassis_centre", new Vec(0, 0.5, -0.9375));
+        rotationOffset = 180;
     }
 }

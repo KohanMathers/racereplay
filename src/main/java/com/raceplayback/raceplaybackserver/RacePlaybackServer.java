@@ -16,6 +16,7 @@ import net.minestom.server.entity.GameMode;
 import net.minestom.server.entity.Player;
 import net.minestom.server.event.GlobalEventHandler;
 import net.minestom.server.event.player.AsyncPlayerConfigurationEvent;
+import net.minestom.server.event.player.PlayerChatEvent;
 import net.minestom.server.instance.*;
 import net.minestom.server.instance.block.Block;
 import net.minestom.server.coordinate.Pos;
@@ -29,6 +30,8 @@ public class RacePlaybackServer {
     private static RacePlaybackServer instance;
 
     private static final Logger logger = LoggerFactory.getLogger(RacePlaybackServer.class);
+
+    private static F1Car testCar;
 
     public RacePlaybackServer() {
         instance = this;
@@ -44,7 +47,8 @@ public class RacePlaybackServer {
 
     public static void main(String[] args) {
         new RacePlaybackServer();
-        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Online());
+//        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Online());
+        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
 
         InstanceManager instanceManager = MinecraftServer.getInstanceManager();
         InstanceContainer instanceContainer = instanceManager.createInstanceContainer();
@@ -65,7 +69,7 @@ public class RacePlaybackServer {
             player.setGameMode(GameMode.CREATIVE);
         });
 
-//        testApiClients();
+        testApiClients();
         spawnTestCar(instanceContainer);
 
         minecraftServer.start("0.0.0.0", 25565);
@@ -81,7 +85,7 @@ public class RacePlaybackServer {
     private static void spawnTestCar(InstanceContainer instance) {
         logger.info("Spawning test car...");
 
-        F1Car testCar = new F1Car("VER", Compound.SOFT);
+        testCar = new F1Car("VER", Compound.SOFT);
 
         testCar.spawn(instance, new Pos(0, 42, 0, 0, 0));
     }

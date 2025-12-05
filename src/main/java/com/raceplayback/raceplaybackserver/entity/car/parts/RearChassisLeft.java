@@ -5,6 +5,6 @@ import net.minestom.server.coordinate.Vec;
 
 public class RearChassisLeft extends CarPart {
     public RearChassisLeft() {
-        super("rear_chassis_left", new Vec(-0.5, 0.5, -0.8));
+        super("rear_chassis_left", new Vec(0.5, 0.5, -1.0));
     }
 }

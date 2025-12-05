@@ -17,10 +17,10 @@ public class F1Car {
     private final NoseCone noseCone;
     private final FrontWingLeft frontWingLeft;
     private final FrontWingRight frontWingRight;
-    // private final RearAssembly rearAssembly;
-    // private final RearChassisCentre rearChassisCentre;
-    // private final RearChassisLeft rearChassisLeft;
-    // private final RearChassisRight rearChassisRight;
+    private final RearAssembly rearAssembly;
+    private final RearChassisCentre rearChassisCentre;
+    private final RearChassisLeft rearChassisLeft;
+    private final RearChassisRight rearChassisRight;
     
     // private final FrontWheel wheelFL;
     // private final FrontWheel wheelFR;
@@ -29,7 +29,7 @@ public class F1Car {
     
     // private final SteeringWheel steeringWheel;
     
-    // private final RearWing rearWing;
+    private final RearWing rearWing;
     
     private final List<CarPart> allParts;
     
@@ -48,10 +48,10 @@ public class F1Car {
         noseCone = new NoseCone();
         frontWingLeft = new FrontWingLeft();
         frontWingRight = new FrontWingRight();
-        // rearAssembly = new RearAssembly();
-        // rearChassisCentre = new RearChassisCentre();
-        // rearChassisLeft = new RearChassisLeft();
-        // rearChassisRight = new RearChassisRight();
+        rearAssembly = new RearAssembly();
+        rearChassisCentre = new RearChassisCentre();
+        rearChassisLeft = new RearChassisLeft();
+        rearChassisRight = new RearChassisRight();
         
         // wheelFL = new FrontWheel(new Vec(-0.7, 0.3, 1.2), compound);
         // wheelFR = new FrontWheel(new Vec(0.7, 0.3, 1.2), compound);
@@ -60,7 +60,7 @@ public class F1Car {
         
         // steeringWheel = new SteeringWheel();
         
-        // rearWing = new RearWing();
+        rearWing = new RearWing();
         
         allParts.add(cockpitLeft);
         allParts.add(cockpitMiddle);
@@ -69,16 +69,16 @@ public class F1Car {
         allParts.add(noseCone);
         allParts.add(frontWingLeft);
         allParts.add(frontWingRight);
-        // allParts.add(rearAssembly);
-        // allParts.add(rearChassisCentre);
-        // allParts.add(rearChassisLeft);
-        // allParts.add(rearChassisRight);
+        allParts.add(rearAssembly);
+        allParts.add(rearChassisCentre);
+        allParts.add(rearChassisLeft);
+        allParts.add(rearChassisRight);
         // allParts.add(wheelFL);
         // allParts.add(wheelFR);
         // allParts.add(wheelRL);
         // allParts.add(wheelRR);
         // allParts.add(steeringWheel);
-        // allParts.add(rearWing);
+        allParts.add(rearWing);
     }
     
     public void spawn(Instance instance, Pos position) {
@@ -99,9 +99,13 @@ public class F1Car {
         }
     }
     
-    // public void setDRS(boolean open) {
-    //     rearWing.setDRS(open);
-    // }
+    public void setDRS(boolean open) {
+        rearWing.setDRS(open);
+    }
+
+    public boolean getDRS() {
+        return rearWing.isDRSOpen();
+    }
     
     // public void setSteeringAngle(float angle) {
     //     steeringWheel.setSteeringAngle(angle);

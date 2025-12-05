@@ -5,6 +5,6 @@ import net.minestom.server.coordinate.Vec;
 
 public class RearAssembly extends CarPart {
     public RearAssembly() {
-        super("rear_assembly", new Vec(0, 0.6, -1.5));
+        super("rear_assembly", new Vec(0, 0.5, -1.875));
     }
 }
