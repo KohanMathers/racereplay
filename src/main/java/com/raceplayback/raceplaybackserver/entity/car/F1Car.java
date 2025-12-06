@@ -21,18 +21,18 @@ public class F1Car {
     private final RearChassisCentre rearChassisCentre;
     private final RearChassisLeft rearChassisLeft;
     private final RearChassisRight rearChassisRight;
-    
-    // private final FrontWheel wheelFL;
-    // private final FrontWheel wheelFR;
-    // private final RearWheel wheelRL;
+
+    private final FrontWheel wheelFL;
+    private final FrontWheel wheelFR;
+    //private final RearWheel wheelRL;
     // private final RearWheel wheelRR;
-    
+
     // private final SteeringWheel steeringWheel;
-    
+
     private final RearWing rearWing;
-    
+
     private final List<CarPart> allParts;
-    
+
     private Pos position;
     private float yaw;
     private String driverCode;
@@ -40,7 +40,7 @@ public class F1Car {
     public F1Car(String driverCode, Compound compound) {
         this.driverCode = driverCode;
         this.allParts = new ArrayList<>();
-        
+
         cockpitLeft = new CockpitLeft();
         cockpitMiddle = new CockpitMiddle();
         cockpitRight = new CockpitRight();
@@ -52,16 +52,16 @@ public class F1Car {
         rearChassisCentre = new RearChassisCentre();
         rearChassisLeft = new RearChassisLeft();
         rearChassisRight = new RearChassisRight();
-        
-        // wheelFL = new FrontWheel(new Vec(-0.7, 0.3, 1.2), compound);
-        // wheelFR = new FrontWheel(new Vec(0.7, 0.3, 1.2), compound);
-        // wheelRL = new RearWheel(new Vec(-0.7, 0.3, -1.2), compound);
+
+        wheelFL = new FrontWheel(new Vec(1.3, 0.3, 2.525), compound);
+        wheelFR = new FrontWheel(new Vec(-1.3, 0.3, 2.525), compound);
+        //wheelRL = new RearWheel(new Vec(-0.7, 0.3, -1.2), compound);
         // wheelRR = new RearWheel(new Vec(0.7, 0.3, -1.2), compound);
-        
+
         // steeringWheel = new SteeringWheel();
-        
+
         rearWing = new RearWing();
-        
+
         allParts.add(cockpitLeft);
         allParts.add(cockpitMiddle);
         allParts.add(cockpitRight);
@@ -73,9 +73,9 @@ public class F1Car {
         allParts.add(rearChassisCentre);
         allParts.add(rearChassisLeft);
         allParts.add(rearChassisRight);
-        // allParts.add(wheelFL);
-        // allParts.add(wheelFR);
-        // allParts.add(wheelRL);
+        allParts.add(wheelFL);
+        allParts.add(wheelFR);
+        //allParts.add(wheelRL);
         // allParts.add(wheelRR);
         // allParts.add(steeringWheel);
         allParts.add(rearWing);
@@ -84,16 +84,20 @@ public class F1Car {
     public void spawn(Instance instance, Pos position) {
         this.position = position;
         this.yaw = position.yaw();
-        
+
         for (CarPart part : allParts) {
             part.spawn(instance, position, yaw);
         }
+
+        instance.scheduleNextTick(inst -> {
+            this.setScale(new Vec(1.28f, 1.01f, 1.24f));
+        });
     }
-    
+
     public void update(Pos newPosition) {
         this.position = newPosition;
         this.yaw = newPosition.yaw();
-        
+
         for (CarPart part : allParts) {
             part.update(position, yaw);
         }
@@ -126,8 +130,25 @@ public class F1Car {
     public String getDriverCode() {
         return driverCode;
     }
-    
+
     public Pos getPosition() {
         return position;
+    }
+
+    public void setScale(Vec scale) {
+        for (CarPart part : allParts) {
+            if (part instanceof FrontWheel || part instanceof RearWheel) {
+                continue;
+            }
+            part.setCustomScale(scale);
+            part.update(position, yaw);
+        }
+    }
+
+    public void rotate(float yaw) {
+        this.yaw = yaw;
+        for (CarPart part : allParts) {
+            part.update(position, yaw);
+        }
     }
 }

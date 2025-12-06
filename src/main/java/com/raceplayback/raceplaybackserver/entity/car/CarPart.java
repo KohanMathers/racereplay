@@ -12,22 +12,26 @@ import net.minestom.server.item.Material;
 public abstract class CarPart {
     protected Entity entity;
     protected Vec offset;
+    protected Vec baseOffset;
     protected float rotationOffset = 0;
+    protected Vec currentScale;
 
     private static final float SCALE = 1.0f;
-    
+
     public CarPart(String modelName, Vec offset) {
         this.offset = offset;
+        this.baseOffset = offset;
+        this.currentScale = new Vec(SCALE, SCALE, SCALE);
         this.entity = new Entity(EntityType.ITEM_DISPLAY);
-        
+
         ItemStack model = ItemStack.of(Material.STICK)
             .withItemModel("raceplayback:" + modelName);
-        
+
         ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
         meta.setItemStack(model);
         meta.setHasNoGravity(true);
-        
-        meta.setScale(new Vec(SCALE, SCALE, SCALE));
+
+        meta.setScale(currentScale);
     }
     
     public void spawn(Instance instance, Pos carPosition, float yaw) {
@@ -37,14 +41,15 @@ public abstract class CarPart {
     }
 
     public void update(Pos carPosition, float yaw) {
+        updateRotation(yaw);
         Pos partPosition = calculatePosition(carPosition, yaw);
         entity.teleport(partPosition);
-        updateRotation(yaw);
     }
 
     protected void updateRotation(float yaw) {
         ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
         meta.setLeftRotation(createYawRotation(yaw + rotationOffset));
+        meta.setNotifyAboutChanges(true);
     }
 
     private float[] createYawRotation(float yaw) {
@@ -86,6 +91,12 @@ public abstract class CarPart {
     }
     
     protected void setCustomScale(Vec scale) {
+        this.currentScale = scale;
+        this.offset = new Vec(
+            baseOffset.x() * scale.x(),
+            baseOffset.y() * scale.y(),
+            baseOffset.z() * scale.z()
+        );
         ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
         meta.setScale(scale);
     }

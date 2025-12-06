@@ -20,6 +20,7 @@ import net.minestom.server.event.player.PlayerChatEvent;
 import net.minestom.server.instance.*;
 import net.minestom.server.instance.block.Block;
 import net.minestom.server.coordinate.Pos;
+import net.minestom.server.coordinate.Vec;
 
 import org.everbuild.blocksandstuff.blocks.BlockPlacementRuleRegistrations;
 import org.everbuild.blocksandstuff.blocks.BlockBehaviorRuleRegistrations;
@@ -47,8 +48,7 @@ public class RacePlaybackServer {
 
     public static void main(String[] args) {
         new RacePlaybackServer();
-//        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Online());
-        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
+        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Online());
 
         InstanceManager instanceManager = MinecraftServer.getInstanceManager();
         InstanceContainer instanceContainer = instanceManager.createInstanceContainer();
@@ -69,10 +69,21 @@ public class RacePlaybackServer {
             player.setGameMode(GameMode.CREATIVE);
         });
 
-        testApiClients();
-        spawnTestCar(instanceContainer);
+        globalEventHandler.addListener(PlayerChatEvent.class, event -> {
+            if (event.getRawMessage().equals("u")) {
+                testCar.update(new Pos(testCar.getPosition().x() - 1, testCar.getPosition().y(), testCar.getPosition().z()));
+            } else if (event.getRawMessage().equals("s")) {
+                testCar.setScale(new Vec(2.0, 2.0, 2.0));
+            } else if (event.getRawMessage().equals("r")) {
+                float yaw = event.getPlayer().getHeadRotation();
+                testCar.rotate(yaw);
+            }
+        });
 
         minecraftServer.start("0.0.0.0", 25565);
+
+        testApiClients();
+        spawnTestCar(instanceContainer);
     }
 
     private static void testApiClients() {
