@@ -53,7 +53,7 @@ public abstract class CarPart {
     }
 
     private float[] createYawRotation(float yaw) {
-        float rad = (float) Math.toRadians(-yaw);
+        float rad = (float) Math.toRadians(yaw);
         float halfAngle = rad / 2.0f;
         float sin = (float) Math.sin(halfAngle);
         float cos = (float) Math.cos(halfAngle);
