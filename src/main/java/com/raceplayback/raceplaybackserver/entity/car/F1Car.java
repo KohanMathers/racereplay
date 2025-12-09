@@ -113,10 +113,13 @@ public class F1Car {
     
     public void setSteeringAngle(float angle) {
          steeringWheel.setSteeringAngle(angle);
+         steeringWheel.update(position, yaw);
 
          float wheelAngle = angle / 36.0f;
          wheelFL.setWheelSteeringAngle(wheelAngle);
+         wheelFL.update(position, yaw);
          wheelFR.setWheelSteeringAngle(wheelAngle);
+         wheelFR.update(position, yaw);
     }
     
     public void setVisible(boolean visible) {
@@ -154,5 +157,21 @@ public class F1Car {
         for (CarPart part : allParts) {
             part.update(position, yaw);
         }
+    }
+
+    public CarPart getCockpitMiddle() {
+        return cockpitMiddle;
+    }
+
+    public SteeringWheel getSteeringWheel() {
+        return steeringWheel;
+    }
+
+    public FrontWheel getFrontLeftWheel() {
+        return wheelFL;
+    }
+
+    public FrontWheel getFrontRightWheel() {
+        return wheelFR;
     }
 }

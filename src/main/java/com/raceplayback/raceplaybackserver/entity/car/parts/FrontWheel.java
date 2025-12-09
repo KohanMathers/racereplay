@@ -22,11 +22,11 @@ public class FrontWheel extends CarPart {
 
     @Override
     public void update(Pos carPosition, float yaw) {
-        super.update(carPosition, yaw);
+        Pos partPosition = calculatePosition(carPosition, yaw);
 
         ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
 
-        float yawRad = (float) Math.toRadians(-(yaw + rotationOffset));
+        float yawRad = (float) Math.toRadians(yaw + rotationOffset);
         float yawHalf = yawRad / 2.0f;
         float[] yawQuat = new float[] {
             0.0f,
@@ -47,7 +47,9 @@ public class FrontWheel extends CarPart {
         float[] combined = multiplyQuaternions(yawQuat, steeringQuat);
 
         meta.setLeftRotation(combined);
-        meta.setNotifyAboutChanges(true);
+
+        entity.teleport(partPosition.withYaw(0));
+        entity.sendPacketToViewers(entity.getMetadataPacket());
     }
 
     private float[] multiplyQuaternions(float[] q1, float[] q2) {

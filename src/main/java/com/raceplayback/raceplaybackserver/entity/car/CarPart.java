@@ -36,20 +36,25 @@ public abstract class CarPart {
     
     public void spawn(Instance instance, Pos carPosition, float yaw) {
         Pos partPosition = calculatePosition(carPosition, yaw);
+        ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
+        meta.setRightRotation(createYawRotation(yaw + rotationOffset));
         entity.setInstance(instance, partPosition);
-        updateRotation(yaw);
     }
 
     public void update(Pos carPosition, float yaw) {
-        updateRotation(yaw);
         Pos partPosition = calculatePosition(carPosition, yaw);
-        entity.teleport(partPosition);
+
+        ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
+        meta.setRightRotation(createYawRotation(yaw + rotationOffset));
+
+        entity.teleport(partPosition.withYaw(0));
+
+        entity.sendPacketToViewers(entity.getMetadataPacket());
     }
 
     protected void updateRotation(float yaw) {
         ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
-        meta.setLeftRotation(createYawRotation(yaw + rotationOffset));
-        meta.setNotifyAboutChanges(true);
+        meta.setRightRotation(createYawRotation(yaw + rotationOffset));
     }
 
     private float[] createYawRotation(float yaw) {
@@ -69,16 +74,16 @@ public abstract class CarPart {
         entity.setInvisible(!visible);
     }
     
-    private Pos calculatePosition(Pos carPosition, float yaw) {
+    protected Pos calculatePosition(Pos carPosition, float yaw) {
         Vec rotated = rotateOffset(offset, yaw);
         return carPosition.add(rotated);
     }
-    
-    private Vec rotateOffset(Vec offset, float yaw) {
-        double rad = Math.toRadians(yaw);
+
+    protected Vec rotateOffset(Vec offset, float yaw) {
+        double rad = Math.toRadians(-yaw);
         double cos = Math.cos(rad);
         double sin = Math.sin(rad);
-        
+
         return new Vec(
             offset.x() * cos - offset.z() * sin,
             offset.y(),
@@ -88,6 +93,22 @@ public abstract class CarPart {
     
     public Entity getEntity() {
         return entity;
+    }
+
+    public float[] getLeftRotation() {
+        ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
+        return meta.getLeftRotation();
+    }
+
+    public float[] getRightRotation() {
+        ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
+        return meta.getRightRotation();
+    }
+
+    public float getYawFromRotation() {
+        float[] quat = getRightRotation();
+        float yaw = (float) (2.0 * Math.atan2(quat[1], quat[3]));
+        return (float) Math.toDegrees(yaw);
     }
     
     protected void setCustomScale(Vec scale) {

@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.raceplayback.raceplaybackserver.commands.SessionTestCommand;
+import com.raceplayback.raceplaybackserver.commands.SessionDebugCommand;
+import com.raceplayback.raceplaybackserver.commands.DebugNextCommand;
 import com.raceplayback.raceplaybackserver.data.DataModelType;
 import com.raceplayback.raceplaybackserver.data.SessionType;
 import com.raceplayback.raceplaybackserver.data.TrackName;
@@ -57,6 +59,8 @@ public class RacePlaybackServer {
 
         CommandManager commandManager = MinecraftServer.getCommandManager();
         commandManager.register(new SessionTestCommand(instanceContainer));
+        commandManager.register(new SessionDebugCommand(instanceContainer));
+        commandManager.register(new DebugNextCommand());
 
         GlobalEventHandler globalEventHandler = MinecraftServer.getGlobalEventHandler();
         globalEventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {

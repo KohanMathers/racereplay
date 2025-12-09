@@ -17,7 +17,7 @@ public class SteeringWheel extends CarPart {
     
     @Override
     public void update(Pos carPosition, float yaw) {
-        super.update(carPosition, yaw);
+        Pos partPosition = calculatePosition(carPosition, yaw);
 
         ItemDisplayMeta meta = (ItemDisplayMeta) entity.getEntityMeta();
 
@@ -42,7 +42,9 @@ public class SteeringWheel extends CarPart {
         float[] combined = multiplyQuaternions(yawQuat, steeringQuat);
 
         meta.setLeftRotation(combined);
-        meta.setNotifyAboutChanges(true);
+
+        entity.teleport(partPosition.withYaw(0));
+        entity.sendPacketToViewers(entity.getMetadataPacket());
     }
 
     private float[] multiplyQuaternions(float[] q1, float[] q2) {
