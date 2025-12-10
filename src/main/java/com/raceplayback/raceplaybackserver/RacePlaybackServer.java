@@ -20,6 +20,7 @@ import net.minestom.server.event.GlobalEventHandler;
 import net.minestom.server.event.player.AsyncPlayerConfigurationEvent;
 import net.minestom.server.instance.*;
 import net.minestom.server.instance.block.Block;
+import net.minestom.server.instance.anvil.AnvilLoader;
 import net.minestom.server.coordinate.Pos;
 
 import org.everbuild.blocksandstuff.blocks.BlockPlacementRuleRegistrations;
@@ -50,7 +51,7 @@ public class RacePlaybackServer {
         InstanceManager instanceManager = MinecraftServer.getInstanceManager();
         InstanceContainer instanceContainer = instanceManager.createInstanceContainer();
 
-        instanceContainer.setGenerator(unit -> unit.modifier().fillHeight(0, 40, Block.GRASS_BLOCK));
+        instanceContainer.setChunkLoader(new AnvilLoader("world"));
         instanceContainer.setChunkSupplier(LightingChunk::new);
 
         BlockPlacementRuleRegistrations.registerDefault();
@@ -66,7 +67,7 @@ public class RacePlaybackServer {
         globalEventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
             final Player player = event.getPlayer();
             event.setSpawningInstance(instanceContainer);
-            player.setRespawnPoint(new Pos(0, 42, 0));
+            player.setRespawnPoint(new Pos(-255, 64, -47));
             player.setGameMode(GameMode.CREATIVE);
         });
 

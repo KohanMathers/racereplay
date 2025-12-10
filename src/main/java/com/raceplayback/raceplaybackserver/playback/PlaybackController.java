@@ -30,15 +30,17 @@ public class PlaybackController {
     private String driverCode;
     private int currentLap = 1;
     private int totalLaps;
+    private double rotationOffset;
 
     private boolean running = false;
-    
-    public PlaybackController(int year, TrackName track, SessionType sessionType, String driverCode, Pos startPosition, Instance instance) {
+
+    public PlaybackController(int year, TrackName track, SessionType sessionType, String driverCode, Pos startPosition, double rotationOffset, Instance instance) {
         this.year = year;
         this.track = track;
         this.sessionType = sessionType;
         this.driverCode = driverCode;
-        this.converter = new CoordinateConverter(startPosition);
+        this.rotationOffset = rotationOffset;
+        this.converter = new CoordinateConverter(startPosition, rotationOffset);
         
         F1ApiClient sessionClient = new F1ApiClient(
             "https://raceplayback.com/api/v1/sessions",
@@ -180,7 +182,7 @@ public class PlaybackController {
         List<TelemetryPoint> telemetry = fetchTelemetry(nextLap);
         
         if (telemetry != null && !telemetry.isEmpty()) {
-            CoordinateConverter lapConverter = new CoordinateConverter(car.getPosition());
+            CoordinateConverter lapConverter = new CoordinateConverter(car.getPosition(), rotationOffset);
             
             nextTimeline = new SessionTimeline(lapConverter, 42);
             nextTimeline.buildFromTelemetry(telemetry);

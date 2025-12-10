@@ -54,7 +54,7 @@ public class SessionTimeline {
                         i, next.x(), next.y(), nextPos.x(), nextPos.z()));
                 }
 
-                yaw = CoordinateConverter.calculateYaw(position, nextPos);
+                yaw = converter.calculateYaw(position, nextPos);
 
                 if (i < 5) {
                     System.out.println(String.format("[TIMELINE] Point %d: Calculated yaw = %.2f°", i, yaw));

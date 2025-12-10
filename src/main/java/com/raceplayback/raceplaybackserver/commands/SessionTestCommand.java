@@ -58,12 +58,15 @@ public class SessionTestCommand extends Command {
             player.sendMessage("§aStarting replay for §b" + driver + " §aat §e" + track.name() + " " + year);
             
             try {
+                double rotationOffset = track == TrackName.SILVERSTONE ? -137.0 : 0.0;
+
                 PlaybackController controller = new PlaybackController(
-                    year, 
-                    track, 
-                    SessionType.R, 
-                    driver, 
-                    player.getPosition(), 
+                    year,
+                    track,
+                    SessionType.R,
+                    driver,
+                    player.getPosition(),
+                    rotationOffset,
                     instance
                 );
                 

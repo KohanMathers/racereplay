@@ -29,13 +29,15 @@ public class DebugPlaybackController {
     private String driverCode;
     private int currentLap = 1;
     private int totalLaps;
+    private double rotationOffset;
 
-    public DebugPlaybackController(int year, TrackName track, SessionType sessionType, String driverCode, Pos startPosition, Instance instance) {
+    public DebugPlaybackController(int year, TrackName track, SessionType sessionType, String driverCode, Pos startPosition, double rotationOffset, Instance instance) {
         this.year = year;
         this.track = track;
         this.sessionType = sessionType;
         this.driverCode = driverCode;
-        this.converter = new CoordinateConverter(startPosition);
+        this.rotationOffset = rotationOffset;
+        this.converter = new CoordinateConverter(startPosition, rotationOffset);
 
         F1ApiClient sessionClient = new F1ApiClient(
             "https://raceplayback.com/api/v1/sessions",
@@ -68,7 +70,7 @@ public class DebugPlaybackController {
         Pos startPos = converter.toMinecraftPos(
             telemetry.get(0).x(),
             telemetry.get(0).y(),
-            42
+            66
         );
         car.spawn(instance, startPos);
 
@@ -106,7 +108,7 @@ public class DebugPlaybackController {
         Pos position = converter.toMinecraftPos(
             current.x(),
             current.y(),
-            42
+            66
         );
 
         server.getLogger().info("=== AFTER COORDINATE CONVERSION ===");
@@ -121,7 +123,7 @@ public class DebugPlaybackController {
             Pos nextPos = converter.toMinecraftPos(
                 next.x(),
                 next.y(),
-                42
+                66
             );
 
             server.getLogger().info("=== NEXT POINT FOR YAW CALCULATION ===");
@@ -130,7 +132,7 @@ public class DebugPlaybackController {
             server.getLogger().info("  Next Minecraft X: {}", nextPos.x());
             server.getLogger().info("  Next Minecraft Z: {}", nextPos.z());
 
-            yaw = CoordinateConverter.calculateYaw(position, nextPos);
+            yaw = converter.calculateYaw(position, nextPos);
 
             server.getLogger().info("=== YAW CALCULATION ===");
             server.getLogger().info("  Delta X: {}", nextPos.x() - position.x());
@@ -142,9 +144,9 @@ public class DebugPlaybackController {
                 Pos nextNextPos = converter.toMinecraftPos(
                     nextNext.x(),
                     nextNext.y(),
-                    42
+                    66
                 );
-                nextYaw = CoordinateConverter.calculateYaw(nextPos, nextNextPos);
+                nextYaw = converter.calculateYaw(nextPos, nextNextPos);
 
                 server.getLogger().info("=== NEXT YAW FOR STEERING ===");
                 server.getLogger().info("  Next Yaw: {}°", nextYaw);
