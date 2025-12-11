@@ -6,11 +6,15 @@ import org.slf4j.LoggerFactory;
 import com.raceplayback.raceplaybackserver.commands.SessionTestCommand;
 import com.raceplayback.raceplaybackserver.commands.SessionDebugCommand;
 import com.raceplayback.raceplaybackserver.commands.DebugNextCommand;
+import com.raceplayback.raceplaybackserver.commands.ScanTrackCommand;
+import com.raceplayback.raceplaybackserver.commands.VisualizeCenterlineCommand;
 import com.raceplayback.raceplaybackserver.data.DataModelType;
 import com.raceplayback.raceplaybackserver.data.SessionType;
 import com.raceplayback.raceplaybackserver.data.TrackName;
 import com.raceplayback.raceplaybackserver.network.F1ApiClient;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.minestom.server.Auth;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.command.CommandManager;
@@ -18,8 +22,11 @@ import net.minestom.server.entity.GameMode;
 import net.minestom.server.entity.Player;
 import net.minestom.server.event.GlobalEventHandler;
 import net.minestom.server.event.player.AsyncPlayerConfigurationEvent;
+import net.minestom.server.event.player.PlayerChatEvent;
 import net.minestom.server.instance.*;
 import net.minestom.server.instance.block.Block;
+import net.minestom.server.item.ItemStack;
+import net.minestom.server.item.Material;
 import net.minestom.server.instance.anvil.AnvilLoader;
 import net.minestom.server.coordinate.Pos;
 
@@ -62,6 +69,8 @@ public class RacePlaybackServer {
         commandManager.register(new SessionTestCommand(instanceContainer));
         commandManager.register(new SessionDebugCommand(instanceContainer));
         commandManager.register(new DebugNextCommand());
+        commandManager.register(new ScanTrackCommand(instanceContainer));
+        commandManager.register(new VisualizeCenterlineCommand(instanceContainer));
 
         GlobalEventHandler globalEventHandler = MinecraftServer.getGlobalEventHandler();
         globalEventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
@@ -69,6 +78,12 @@ public class RacePlaybackServer {
             event.setSpawningInstance(instanceContainer);
             player.setRespawnPoint(new Pos(-255, 64, -47));
             player.setGameMode(GameMode.CREATIVE);
+        });
+
+        globalEventHandler.addListener(PlayerChatEvent.class, event -> {
+            if (event.getRawMessage().equals("Hannah")) {
+                event.getPlayer().getInventory().addItemStack(ItemStack.of(Material.COD).withCustomName(Component.text("The fish from Hitman", NamedTextColor.GREEN)));
+            }
         });
 
         minecraftServer.start("0.0.0.0", 25565);
