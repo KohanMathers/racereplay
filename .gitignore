@@ -3,3 +3,4 @@ venv/
 target/
 f1_data.db
 website/
+.vscode/
