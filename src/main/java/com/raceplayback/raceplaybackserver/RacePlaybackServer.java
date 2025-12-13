@@ -4,8 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.raceplayback.raceplaybackserver.commands.SessionTestCommand;
+import com.raceplayback.raceplaybackserver.commands.SuggestionCommand;
 import com.raceplayback.raceplaybackserver.commands.SessionDebugCommand;
 import com.raceplayback.raceplaybackserver.commands.DebugNextCommand;
+import com.raceplayback.raceplaybackserver.commands.FeedbackCommand;
+import com.raceplayback.raceplaybackserver.commands.ReportBugCommand;
 import com.raceplayback.raceplaybackserver.commands.ScanTrackCommand;
 import com.raceplayback.raceplaybackserver.commands.VisualizeCenterlineCommand;
 import com.raceplayback.raceplaybackserver.data.DataModelType;
@@ -24,7 +27,6 @@ import net.minestom.server.event.GlobalEventHandler;
 import net.minestom.server.event.player.AsyncPlayerConfigurationEvent;
 import net.minestom.server.event.player.PlayerChatEvent;
 import net.minestom.server.instance.*;
-import net.minestom.server.instance.block.Block;
 import net.minestom.server.item.ItemStack;
 import net.minestom.server.item.Material;
 import net.minestom.server.instance.anvil.AnvilLoader;
@@ -71,6 +73,9 @@ public class RacePlaybackServer {
         commandManager.register(new DebugNextCommand());
         commandManager.register(new ScanTrackCommand(instanceContainer));
         commandManager.register(new VisualizeCenterlineCommand(instanceContainer));
+        commandManager.register(new ReportBugCommand());
+        commandManager.register(new SuggestionCommand());
+        commandManager.register(new FeedbackCommand());
 
         GlobalEventHandler globalEventHandler = MinecraftServer.getGlobalEventHandler();
         globalEventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
